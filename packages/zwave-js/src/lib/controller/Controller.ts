@@ -10,7 +10,7 @@ import {
 	ZWaveError,
 	ZWaveErrorCodes,
 } from "@zwave-js/core";
-import { flatMap, JSONObject, num2hex } from "@zwave-js/shared";
+import { flatMap, JSONObject, num2hex, pick } from "@zwave-js/shared";
 import { distinct } from "alcalzone-shared/arrays";
 import {
 	createDeferredPromise,
@@ -45,6 +45,27 @@ import { DeviceClass } from "../node/DeviceClass";
 import { ZWaveNode } from "../node/Node";
 import { InterviewStage, NodeStatus } from "../node/Types";
 import { VirtualNode } from "../node/VirtualNode";
+import {
+	ExtNVMReadLongBufferRequest,
+	ExtNVMReadLongBufferResponse,
+} from "../serialapi/nvm/ExtNVMReadLongBufferMessages";
+import {
+	ExtNVMReadLongByteRequest,
+	ExtNVMReadLongByteResponse,
+} from "../serialapi/nvm/ExtNVMReadLongByteMessages";
+import {
+	ExtNVMWriteLongBufferRequest,
+	ExtNVMWriteLongBufferResponse,
+} from "../serialapi/nvm/ExtNVMWriteLongBufferMessages";
+import {
+	ExtNVMWriteLongByteRequest,
+	ExtNVMWriteLongByteResponse,
+} from "../serialapi/nvm/ExtNVMWriteLongByteMessages";
+import {
+	GetNVMIdRequest,
+	GetNVMIdResponse,
+	NVMId,
+} from "../serialapi/nvm/GetNVMIdMessages";
 import {
 	AddNodeStatus,
 	AddNodeToNetworkRequest,
@@ -2438,5 +2459,69 @@ ${associatedNodes.join(", ")}`,
 				}
 			}
 		}
+	}
+
+	/** Returns information of the controller's external NVM */
+	public async getNVMId(): Promise<NVMId> {
+		const ret = await this.driver.sendMessage<GetNVMIdResponse>(
+			new GetNVMIdRequest(this.driver),
+		);
+		return pick(ret, ["nvmManufacturerId", "memoryType", "memorySize"]);
+	}
+
+	/** Reads a byte from the external NVM at the given offset */
+	public async externalNVMReadByte(offset: number): Promise<number> {
+		const ret = await this.driver.sendMessage<ExtNVMReadLongByteResponse>(
+			new ExtNVMReadLongByteRequest(this.driver, { offset }),
+		);
+		return ret.byte;
+	}
+
+	/**
+	 * Writes a byte to the external NVM at the given offset
+	 * **WARNING:** This function can write in the full NVM address space and is not offset to start at the application area.
+	 * Take care not to accidentally overwrite the protocol NVM area!
+	 *
+	 * @returns `true` when writing succeeded, `false` otherwise
+	 */
+	public async externalNVMWriteByte(
+		offset: number,
+		data: number,
+	): Promise<boolean> {
+		const ret = await this.driver.sendMessage<ExtNVMWriteLongByteResponse>(
+			new ExtNVMWriteLongByteRequest(this.driver, { offset, byte: data }),
+		);
+		return ret.success;
+	}
+
+	/** Reads a buffer from the external NVM at the given offset */
+	public async externalNVMReadBuffer(
+		offset: number,
+		length: number,
+	): Promise<Buffer> {
+		const ret = await this.driver.sendMessage<ExtNVMReadLongBufferResponse>(
+			new ExtNVMReadLongBufferRequest(this.driver, { offset, length }),
+		);
+		return ret.buffer;
+	}
+
+	/**
+	 * Writes a buffer to the external NVM at the given offset
+	 * **WARNING:** This function can write in the full NVM address space and is not offset to start at the application area.
+	 * Take care not to accidentally overwrite the protocol NVM area!
+	 *
+	 * @returns `true` when writing succeeded, `false` otherwise
+	 */
+	public async externalNVMWriteBuffer(
+		offset: number,
+		buffer: Buffer,
+	): Promise<boolean> {
+		const ret = await this.driver.sendMessage<ExtNVMWriteLongBufferResponse>(
+			new ExtNVMWriteLongBufferRequest(this.driver, {
+				offset,
+				buffer,
+			}),
+		);
+		return ret.success;
 	}
 }
